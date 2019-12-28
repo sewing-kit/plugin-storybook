@@ -1,6 +1,6 @@
 {
   "name": "sewing-kit-plugin-template",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A plugin for sewing-kit that ...",
   "main": "index.js",
   "repository": "https://github.com/sewing-kit/plugin-knex.git",
