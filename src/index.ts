@@ -1,3 +1,24 @@
+// Storybook is very badly designed for tools to sit on top of it. To make this
+// work, I’ve had to replicate the logic they use internally in their CLI command
+// to run the development server (Storybook is basically just a fancy Webpack wrapper).
+// There is no node API for using it, and the options for customizing Webpack don’t
+// work here because Sewing Kit plugins hold the "shared" config we need access to.
+//
+// Most of the logic for setting up the Webpack dev servers is here:
+// https://github.com/storybookjs/storybook/blob/next/lib/core/src/server/dev-server.js
+//
+// Most of their additional UI stuff around that server is here:
+// https://github.com/storybookjs/storybook/blob/next/lib/core/src/server/build-dev.js
+//
+// Most of their preview (story code) Webpack config is in these files:
+// https://github.com/storybookjs/storybook/blob/next/lib/core/src/server/preview/iframe-webpack.config.js
+// https://github.com/storybookjs/storybook/blob/next/lib/core/src/server/preview/base-webpack.config.js
+//
+// I've only implemented dev, there is a build command but meh.
+//
+// React preset adds a few more configurations, not sure what to do with it:
+// https://github.com/storybookjs/storybook/blob/next/app/react/src/server/options.ts
+
 import * as fs from 'fs';
 import * as path from 'path';
 
