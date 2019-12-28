@@ -1,0 +1,30 @@
+{
+  "name": "sewing-kit-plugin-template",
+  "version": "0.0.3",
+  "description": "A plugin for sewing-kit that ...",
+  "main": "index.js",
+  "repository": "https://github.com/sewing-kit/plugin-knex.git",
+  "author": "Chris Sauve <chrismsauve@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "lint": "sk lint",
+    "test": "sk test",
+    "build": "sk build",
+    "type-check": "sk type-check",
+    "prepublish": "sk build"
+  },
+  "devDependencies": {
+    "@quilted/sewing-kit-plugins": "^0.0.23",
+    "@sewing-kit/cli": "^0.0.34",
+    "@sewing-kit/eslint-plugin": "^0.0.8"
+  },
+  "dependencies": {
+    "@sewing-kit/plugins": "^0.0.13"
+  },
+  "files": [
+    "src",
+    "build",
+    "index.js",
+    "index.d.ts"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  // Formatting
+  "eslint.format.enable": true,
+  "eslint.packageManager": "yarn",
+  "prettier.packageManager": "yarn",
+  "[typescript]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll": true
+  }
+}

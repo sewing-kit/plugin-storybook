@@ -1,0 +1,8 @@
+/.sewing-kit
+/node_modules
+/build
+.DS_Store
+*.log
+/*.d.ts
+/*.js
+!/.eslintrc.js
