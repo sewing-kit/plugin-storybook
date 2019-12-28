@@ -14,12 +14,12 @@
     "prepublish": "sk build"
   },
   "devDependencies": {
-    "@quilted/sewing-kit-plugins": "^0.0.23",
-    "@sewing-kit/cli": "^0.0.34",
+    "@quilted/sewing-kit-plugins": "^0.0.24",
+    "@sewing-kit/cli": "^0.0.36",
     "@sewing-kit/eslint-plugin": "^0.0.8"
   },
   "dependencies": {
-    "@sewing-kit/plugins": "^0.0.13"
+    "@sewing-kit/plugins": "^0.0.14"
   },
   "files": [
     "src",
