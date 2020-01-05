@@ -82,7 +82,7 @@ export function storybook({port: defaultPort, config}: Options = {}) {
           }
 
           const step = api.createStep(
-            {label: 'Running storybook', indefinite: true},
+            {label: 'run storybook', id: 'Storybook.Run'},
             async (step) => {
               let webpackDevMiddlewareInstance:
                 | ReturnType<typeof webpackDevMiddleware>
@@ -109,245 +109,265 @@ export function storybook({port: defaultPort, config}: Options = {}) {
                 import('webpack-merge'),
               ] as const);
 
-              const app = express();
-              const router = Router();
-
               const [aliases, extensions, rules] = await Promise.all([
                 configuration.webpackAliases!.run({}),
                 configuration.webpackExtensions!.run([]),
                 configuration.webpackRules!.run([]),
               ] as const);
 
-              async function runManager() {
-                const loadManagerConfig = require('@storybook/core/dist/server/manager/manager-config')
-                  .default;
-                const managerWebpackConfig: import('webpack').Configuration = await configuration.storybookManagerWebpackConfig!.run(
-                  webpackMerge(
-                    await loadManagerConfig({
-                      configType: 'DEVELOPMENT',
-                      outputDir,
-                      configDir: path.dirname(configFile),
-                      cache: {},
-                      corePresets: [
+              step.indefinite(async ({stdio}) => {
+                const app = express();
+                const router = Router();
+
+                async function runManager() {
+                  const loadManagerConfig = require('@storybook/core/dist/server/manager/manager-config')
+                    .default;
+                  const managerWebpackConfig: import('webpack').Configuration = await configuration.storybookManagerWebpackConfig!.run(
+                    webpackMerge(
+                      await loadManagerConfig({
+                        configType: 'DEVELOPMENT',
+                        outputDir,
+                        configDir: path.dirname(configFile),
+                        cache: {},
+                        corePresets: [
+                          path.join(
+                            storybookCorePath,
+                            'dist/server/manager/manager-preset.js',
+                          ),
+                        ],
+                      }),
+                      {
+                        resolve: {
+                          extensions: extensions as any,
+                          alias: aliases,
+                        },
+                        module: {
+                          rules: rules as any,
+                        },
+                      },
+                    ),
+                  );
+
+                  await new Promise((resolve) => {
+                    webpack(managerWebpackConfig).watch(
+                      {
+                        aggregateTimeout: 1,
+                        ignored: /node_modules/,
+                      },
+                      (error, stats) => {
+                        if (error || stats.hasErrors()) {
+                          if (webpackDevMiddlewareInstance) {
+                            try {
+                              webpackDevMiddlewareInstance.close();
+                              step.log(
+                                'Closed Storybook preview build process',
+                                {
+                                  level: LogLevel.Errors,
+                                },
+                              );
+                            } catch {
+                              step.log(
+                                'Unable to close Storybook preview build process',
+                                {level: LogLevel.Errors},
+                              );
+                            }
+                          }
+
+                          throw new DiagnosticError({
+                            title: 'Storybook manager compilation failed',
+                            content: `The compilation failed with the following output:\n\n${stats.toString(
+                              'errors-warnings',
+                            )}`,
+                            suggestion:
+                              'Try reinstalling your Storybook dependencies, as this generally indicates that Storybook’s web app code has been changed in your local node_modules.',
+                          });
+                        } else {
+                          resolve(stats);
+                        }
+                      },
+                    );
+                  });
+                }
+
+                async function runPreview() {
+                  const [entries, plugins, outputDirectory] = await Promise.all(
+                    [
+                      configuration.storybookEntries!.run([
                         path.join(
                           storybookCorePath,
-                          'dist/server/manager/manager-preset.js',
+                          'dist/server/common/polyfills.js',
                         ),
-                      ],
-                    }),
+                        path.join(
+                          storybookCorePath,
+                          'dist/server/preview/globals.js',
+                        ),
+                        configFile,
+                        `${require.resolve(
+                          'webpack-hot-middleware/client.js',
+                        )}?reload=true&quiet=true`,
+                      ]),
+                      configuration.storybookWebpackPlugins!.run([
+                        new HtmlWebpackPlugin({
+                          filename: 'iframe.html',
+                          chunksSortMode: 'none',
+                          alwaysWriteToDisk: true,
+                          inject: false,
+                          templateParameters: (
+                            compilation,
+                            files,
+                            options,
+                          ) => ({
+                            compilation,
+                            files,
+                            options,
+                            version: require('@storybook/core/package.json')
+                              .version,
+                            globals: {},
+                            headHtmlSnippet: getPreviewHeadHtml(process.env),
+                            dlls: [],
+                            bodyHtmlSnippet: getPreviewBodyHtml(process.env),
+                          }),
+                          template: path.join(
+                            storybookCorePath,
+                            'dist/server/templates/index.ejs',
+                          ),
+                        }),
+                        new DefinePlugin({
+                          NODE_ENV: JSON.stringify(process.env.NODE_ENV),
+                          'process.env': {
+                            NODE_ENV: '"development"',
+                            NODE_PATH: '""',
+                            PUBLIC_URL: '"."',
+                          },
+                        }),
+                        new HotModuleReplacementPlugin(),
+                      ]),
+                      configuration.storybookOutput!.run(
+                        workspace.fs.buildPath('storybook'),
+                      ),
+                    ] as const,
+                  );
+
+                  const previewWebpackConfig = await configuration.webpackConfig!.run(
                     {
-                      resolve: {extensions: extensions as any, alias: aliases},
-                      module: {
-                        rules: rules as any,
+                      mode: 'development',
+                      entry: entries,
+                      output: {
+                        publicPath: '',
+                        filename: '[name].[hash].bundle.js',
+                        path: outputDirectory,
+                      },
+                      devtool: '#cheap-module-source-map',
+                      plugins: plugins as any,
+                      module: {rules: rules as any},
+                      resolve: {
+                        extensions: extensions as any,
+                        alias: aliases,
+                      },
+                      optimization: {
+                        splitChunks: {
+                          chunks: 'all',
+                        },
+                        runtimeChunk: true,
+                        minimizer: [
+                          new TerserWebpackPlugin({
+                            cache: true,
+                            parallel: true,
+                            sourceMap: true,
+                            terserOptions: {
+                              mangle: false,
+                              // eslint-disable-next-line @typescript-eslint/camelcase
+                              keep_fnames: true,
+                            },
+                          }),
+                        ],
                       },
                     },
-                  ),
-                );
+                  );
 
-                await new Promise((resolve) => {
-                  webpack(managerWebpackConfig).watch(
+                  const previewCompiler = webpack(
+                    await configuration.storybookWebpackConfig!.run(
+                      previewWebpackConfig,
+                    ),
+                  );
+                  webpackDevMiddlewareInstance = webpackDevMiddleware(
+                    previewCompiler,
                     {
-                      aggregateTimeout: 1,
-                      ignored: /node_modules/,
+                      publicPath: previewWebpackConfig.output!.publicPath!,
+                      watchOptions: {
+                        aggregateTimeout: 1,
+                        ignored: /node_modules/,
+                      },
+                      // this actually causes 0 (regular) output from wdm & webpack
+                      logLevel: 'warn',
                     },
-                    (error, stats) => {
-                      if (error || stats.hasErrors()) {
-                        if (webpackDevMiddlewareInstance) {
-                          try {
-                            webpackDevMiddlewareInstance.close();
-                            step.log('Closed Storybook preview build process', {
-                              level: LogLevel.Errors,
-                            });
-                          } catch {
-                            step.log(
-                              'Unable to close Storybook preview build process',
-                              {level: LogLevel.Errors},
-                            );
-                          }
-                        }
+                  );
 
-                        throw new DiagnosticError({
-                          title: 'Storybook manager compilation failed',
-                          content: `The compilation failed with the following output:\n\n${stats.toString(
-                            'errors-warnings',
-                          )}`,
-                          suggestion:
-                            'Try reinstalling your Storybook dependencies, as this generally indicates that Storybook’s web app code has been changed in your local node_modules.',
-                        });
+                  router.use(webpackDevMiddlewareInstance);
+                  router.use(webpackHotMiddleware(previewCompiler));
+
+                  await new Promise((resolve, reject) => {
+                    webpackDevMiddlewareInstance!.waitUntilValid((stats) => {
+                      if (!stats) {
+                        reject(
+                          new DiagnosticError({
+                            title: 'Unable to build preview',
+                          }),
+                        );
+                      } else if (stats.hasErrors()) {
+                        reject(
+                          new DiagnosticError({
+                            title: 'Unable to build preview',
+                            content: `The preview failed to build with the following output:\n\n${stats.toString(
+                              'errors-warnings',
+                            )}`,
+                          }),
+                        );
                       } else {
                         resolve(stats);
                       }
-                    },
+                    });
+                  });
+                }
+
+                await Promise.all([runManager(), runPreview()]);
+
+                router.get('/', (_, response) => {
+                  response.set('Content-Type', 'text/html');
+                  response.sendFile(path.join(`${outputDir}/index.html`));
+                });
+
+                router.get(/\/sb_dll\/(.+\.js)$/, (request, response) => {
+                  response.set('Content-Type', 'text/javascript');
+                  response.sendFile(
+                    path.join(`${dllPath}/${request.params[0]}`),
                   );
                 });
-              }
 
-              async function runPreview() {
-                const [entries, plugins, outputDirectory] = await Promise.all([
-                  configuration.storybookEntries!.run([
-                    path.join(
-                      storybookCorePath,
-                      'dist/server/common/polyfills.js',
-                    ),
-                    path.join(
-                      storybookCorePath,
-                      'dist/server/preview/globals.js',
-                    ),
-                    configFile,
-                    `${require.resolve(
-                      'webpack-hot-middleware/client.js',
-                    )}?reload=true&quiet=true`,
-                  ]),
-                  configuration.storybookWebpackPlugins!.run([
-                    new HtmlWebpackPlugin({
-                      filename: 'iframe.html',
-                      chunksSortMode: 'none',
-                      alwaysWriteToDisk: true,
-                      inject: false,
-                      templateParameters: (compilation, files, options) => ({
-                        compilation,
-                        files,
-                        options,
-                        version: require('@storybook/core/package.json')
-                          .version,
-                        globals: {},
-                        headHtmlSnippet: getPreviewHeadHtml(process.env),
-                        dlls: [],
-                        bodyHtmlSnippet: getPreviewBodyHtml(process.env),
-                      }),
-                      template: path.join(
-                        storybookCorePath,
-                        'dist/server/templates/index.ejs',
-                      ),
-                    }),
-                    new DefinePlugin({
-                      NODE_ENV: JSON.stringify(process.env.NODE_ENV),
-                      'process.env': {
-                        NODE_ENV: '"development"',
-                        NODE_PATH: '""',
-                        PUBLIC_URL: '"."',
-                      },
-                    }),
-                    new HotModuleReplacementPlugin(),
-                  ]),
-                  configuration.storybookOutput!.run(
-                    workspace.fs.buildPath('storybook'),
-                  ),
-                ] as const);
-
-                const previewWebpackConfig = await configuration.webpackConfig!.run(
-                  {
-                    mode: 'development',
-                    entry: entries,
-                    output: {
-                      publicPath: '',
-                      filename: '[name].[hash].bundle.js',
-                      path: outputDirectory,
-                    },
-                    devtool: '#cheap-module-source-map',
-                    plugins: plugins as any,
-                    module: {rules: rules as any},
-                    resolve: {
-                      extensions: extensions as any,
-                      alias: aliases,
-                    },
-                    optimization: {
-                      splitChunks: {
-                        chunks: 'all',
-                      },
-                      runtimeChunk: true,
-                      minimizer: [
-                        new TerserWebpackPlugin({
-                          cache: true,
-                          parallel: true,
-                          sourceMap: true,
-                          terserOptions: {
-                            mangle: false,
-                            // eslint-disable-next-line @typescript-eslint/camelcase
-                            keep_fnames: true,
-                          },
-                        }),
-                      ],
-                    },
-                  },
-                );
-
-                const previewCompiler = webpack(
-                  await configuration.storybookWebpackConfig!.run(
-                    previewWebpackConfig,
-                  ),
-                );
-                webpackDevMiddlewareInstance = webpackDevMiddleware(
-                  previewCompiler,
-                  {
-                    publicPath: previewWebpackConfig.output!.publicPath!,
-                    watchOptions: {
-                      aggregateTimeout: 1,
-                      ignored: /node_modules/,
-                    },
-                    // this actually causes 0 (regular) output from wdm & webpack
-                    logLevel: 'warn',
-                  },
-                );
-
-                router.use(webpackDevMiddlewareInstance);
-                router.use(webpackHotMiddleware(previewCompiler));
-
-                await new Promise((resolve, reject) => {
-                  webpackDevMiddlewareInstance!.waitUntilValid((stats) => {
-                    if (!stats) {
-                      reject(
-                        new DiagnosticError({
-                          title: 'Unable to build preview',
-                        }),
-                      );
-                    } else if (stats.hasErrors()) {
-                      reject(
-                        new DiagnosticError({
-                          title: 'Unable to build preview',
-                          content: `The preview failed to build with the following output:\n\n${stats.toString(
-                            'errors-warnings',
-                          )}`,
-                        }),
-                      );
-                    } else {
-                      resolve(stats);
-                    }
-                  });
+                router.get(/\/sb_dll\/(.+\.LICENCE)$/, (request, response) => {
+                  response.set('Content-Type', 'text/html');
+                  response.sendFile(
+                    path.join(`${dllPath}/${request.params[0]}`),
+                  );
                 });
-              }
 
-              await Promise.all([runManager(), runPreview()]);
+                router.get(/(.+\.js)$/, (request, response) => {
+                  response.set('Content-Type', 'text/javascript');
+                  response.sendFile(
+                    path.join(`${outputDir}/${request.params[0]}`),
+                  );
+                });
 
-              router.get('/', (_, response) => {
-                response.set('Content-Type', 'text/html');
-                response.sendFile(path.join(`${outputDir}/index.html`));
-              });
+                app.use(router);
 
-              router.get(/\/sb_dll\/(.+\.js)$/, (request, response) => {
-                response.set('Content-Type', 'text/javascript');
-                response.sendFile(path.join(`${dllPath}/${request.params[0]}`));
-              });
-
-              router.get(/\/sb_dll\/(.+\.LICENCE)$/, (request, response) => {
-                response.set('Content-Type', 'text/html');
-                response.sendFile(path.join(`${dllPath}/${request.params[0]}`));
-              });
-
-              router.get(/(.+\.js)$/, (request, response) => {
-                response.set('Content-Type', 'text/javascript');
-                response.sendFile(
-                  path.join(`${outputDir}/${request.params[0]}`),
-                );
-              });
-
-              app.use(router);
-
-              const port =
-                (await configuration.storybookPort!.run(defaultPort)) ??
-                (await getPort());
-              app.listen(port, () => {
-                step.log(`Running storybook on localhost:${port}`);
+                const port =
+                  (await configuration.storybookPort!.run(defaultPort)) ??
+                  (await getPort());
+                app.listen(port, () => {
+                  stdio.stdout.write(
+                    `running storybook on localhost:${port}\n`,
+                  );
+                });
               });
             },
           );
