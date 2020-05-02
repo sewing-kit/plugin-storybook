@@ -209,7 +209,10 @@ export function storybook({port: defaultPort, config}: Options = {}) {
                       configuration.storybookWebpackPlugins!.run([
                         new HtmlWebpackPlugin({
                           filename: 'iframe.html',
-                          chunksSortMode: 'none',
+                          // Actual storybook is 'none', but seems to longer
+                          // be accepted
+                          // @see https://github.com/storybookjs/storybook/blob/f95829a2c07ae601e32874ef4f4a25bb8c485836/lib/core/src/server/manager/manager-webpack.config.js#L71
+                          chunksSortMode: 'auto',
                           alwaysWriteToDisk: true,
                           inject: false,
                           templateParameters: (
