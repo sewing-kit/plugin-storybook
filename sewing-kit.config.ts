@@ -6,7 +6,7 @@ export default createPackage((pkg) => {
   pkg.runtime(Runtime.Node);
   pkg.entry({root: './src/index'});
   pkg.use(
-    quiltWorkspace(),
+    quiltWorkspace({css: false}),
     quiltPackage(),
     buildFlexibleOutputs({
       binaries: false,

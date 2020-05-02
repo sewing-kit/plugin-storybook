@@ -14,7 +14,7 @@
     "prepublish": "sk build"
   },
   "devDependencies": {
-    "@quilted/sewing-kit-plugins": "^0.0.44",
+    "@quilted/sewing-kit-plugins": "^0.0.45",
     "@sewing-kit/cli": "^0.0.46",
     "@sewing-kit/eslint-plugin": "^0.0.13",
     "@sewing-kit/plugin-webpack": "^0.0.39",
