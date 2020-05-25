@@ -76,7 +76,7 @@ export function storybook({port: defaultPort, config}: Options = {}) {
       }));
 
       (hooks as import('@sewing-kit/hooks').DevPackageHooks).steps.hook(
-        (steps, {configuration}) => {
+        (steps, configuration) => {
           if (configuration.webpackConfig == null) {
             throw new MissingPluginError('@sewing-kit/plugin-webpack');
           }
