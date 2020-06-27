@@ -1,3 +1,5 @@
+/* eslint node/global-require: off */
+
 // Storybook is very badly designed for tools to sit on top of it. To make this
 // work, I’ve had to replicate the logic they use internally in their CLI command
 // to run the development server (Storybook is basically just a fancy Webpack wrapper).
@@ -384,7 +386,8 @@ export function storybook({port: defaultPort, config}: Options = {}) {
 
 const interpolate = (string: string, data = {}) =>
   Object.entries(data).reduce(
-    (acc, [k, v]) => acc.replace(new RegExp(`%${k}%`, 'g'), v as any),
+    (acc, [key, value]) =>
+      acc.replace(new RegExp(`%${key}%`, 'g'), value as any),
     string,
   );
 
